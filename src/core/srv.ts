@@ -1,4 +1,5 @@
 import express from 'express';
+import bodyParser from 'body-parser'
 import mongo from './mongo';
 import redis from './redis';
 import {OpenApiValidator} from 'express-openapi-validator'
@@ -21,18 +22,19 @@ class Server{
     this.mongoSetup();
     this.redisSetup();
   }
-  private mongoSetup():void{
-    mongo.open();
+  private async mongoSetup():Promise <void>{
+    await mongo.open()
   }
-  private redisSetup():void{
-    redis.open();
+  private async redisSetup():Promise<void>{
+    await redis.open()
   }
   private async configSetup(): Promise<void>{
     const yamlSpecFile = './docs/openapi.yml'
     const apiDefinition = YAML.load(yamlSpecFile)
     const apiSummary = summarise(apiDefinition)
     logger.info(apiSummary)
-           
+    
+    this.srv.use(bodyParser.json())
     /* istanbul ignore next */
     if (config.morganLogger) {
       this.srv.use(morgan(':method :url :status :response-time ms - :res[content-length]'))
@@ -50,6 +52,7 @@ class Server{
     
     // setup API validator
     const validatorOptions = {
+      coerceTypes: true,
       apiSpec: yamlSpecFile,
       validateRequests: true,
       validateResponses: true
@@ -71,6 +74,9 @@ class Server{
       onCreateRoute: (method: string, descriptor: any[]) => {
         descriptor.shift()
         logger.verbose(`${method}: ${descriptor.map((d: any) => d.name).join(', ')}`)
+      },
+      security: {
+        bearerAuth: api.auth
       }
     })
     connect(this.srv)
